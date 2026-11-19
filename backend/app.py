@@ -109,7 +109,10 @@ def ask_gemini(text):
         if "404" in msg:
             raise UserError(f"Model '{MODEL}' not found. Check GEMINI_MODEL in Vercel.", 500)
 
-        raise UserError("Could not reach Gemini. Check Vercel logs for details.", 502)
+        if "503" in msg or "UNAVAILABLE" in msg.upper():
+    raise UserError("Gemini is temporarily unavailable. Please try again shortly.", 503)
+
+raise UserError("Could not reach Gemini. Please try again.", 502)
 
 
 def clean(data):
