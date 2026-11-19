@@ -210,7 +210,7 @@ def save_quiz_result():
         return jsonify(error="Could not save quiz result. Check MySQL and analysis ID."), 500
 
 
-@app.get("/api/health")
+@app.get("/")
 def health():
     database = "disconnected"
     try:
