@@ -4,7 +4,7 @@ import io, json, os
 import pymupdf  # PyMuPDF
 import pytesseract
 from dotenv import load_dotenv
-from flask import Flask, jsonify, request
+from flask import Flask, jsonify, request, send_from_directory
 from flask_cors import CORS
 from google import genai
 from google.genai import types
@@ -209,7 +209,16 @@ def save_quiz_result():
         app.logger.exception("Could not save quiz result")
         return jsonify(error="Could not save quiz result. Check MySQL and analysis ID."), 500
 
+# Homepage
+PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
+@app.get("/")
+def home():
+    return send_from_directory(PROJECT_ROOT, "index.html")
+
+@app.get("/<path:filename>")
+def frontend_files(filename):
+    return send_from_directory(PROJECT_ROOT, filename)
 @app.get("/")
 def health():
     database = "disconnected"
