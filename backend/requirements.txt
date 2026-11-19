@@ -5,4 +5,3 @@ pymupdf
 pytesseract
 pillow
 google-genai
-mysql-connector-python
