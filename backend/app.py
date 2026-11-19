@@ -96,15 +96,20 @@ def ask_gemini(text):
         return json.loads(res.text)
     except json.JSONDecodeError:
         raise UserError("The AI returned an unreadable answer. Please try again.", 502)
-    except Exception as e:
+        except Exception as e:
+        app.logger.exception("Gemini API error")
         msg = str(e)
+
         if "429" in msg or "quota" in msg.lower():
             raise UserError("Gemini free limit reached. Wait a minute and try again.", 429)
+
         if "API key" in msg or "403" in msg or "401" in msg:
-            raise UserError("Gemini API key is invalid. Check backend/.env.", 500)
+            raise UserError("Gemini API key is invalid. Check Vercel Environment Variables.", 500)
+
         if "404" in msg:
-            raise UserError(f"Model '{MODEL}' not found. Change GEMINI_MODEL in .env.", 500)
-        raise UserError("Could not reach Gemini. Check your internet and try again.", 502)
+            raise UserError(f"Model '{MODEL}' not found. Check GEMINI_MODEL in Vercel.", 500)
+
+        raise UserError("Could not reach Gemini. Check Vercel logs for details.", 502)
 
 
 def clean(data):
