@@ -9,8 +9,6 @@ from flask_cors import CORS
 from google import genai
 from google.genai import types
 from PIL import Image
-import mysql.connector
-from mysql.connector import Error as MySQLError
 
 load_dotenv()
 API_KEY = os.getenv("GEMINI_API_KEY")
@@ -24,17 +22,6 @@ app.config["MAX_CONTENT_LENGTH"] = 5 * 1024 * 1024  # 5 MB
 
 ALLOWED = {"pdf", "jpg", "jpeg", "png"}
 client = genai.Client(api_key=API_KEY) if API_KEY else None
-
-
-def get_db_connection():
-    """Create a fresh MySQL connection using backend/.env settings."""
-    return mysql.connector.connect(
-        host=os.getenv("DB_HOST", "127.0.0.1"),
-        port=int(os.getenv("DB_PORT", "3306")),
-        user=os.getenv("DB_USER", "root"),
-        password=os.getenv("DB_PASSWORD", ""),
-        database=os.getenv("DB_NAME", "resumeiq_db"),
-    )
 
 
 class UserError(Exception):
@@ -139,39 +126,36 @@ def clean(data):
 @app.post("/api/analyze")
 def analyze():
     f = request.files.get("resume")
+
     if not f or not f.filename:
         return jsonify(error="No file uploaded."), 400
+
     ext = f.filename.rsplit(".", 1)[-1].lower() if "." in f.filename else ""
+
     if ext not in ALLOWED:
         return jsonify(error="Only PDF, JPG, JPEG and PNG files are allowed."), 400
+
     try:
         text = extract_text(f.read(), ext)
+
         if len(text.strip()) < 50:
             raise UserError("Could not read enough text. Upload a clearer resume.", 422)
+
         analysis, questions = clean(ask_gemini(text))
-        # Persist the AI analysis and quiz questions in MySQL.
-        conn = get_db_connection()
-        try:
-            cursor = conn.cursor()
-            cursor.execute(
-                """INSERT INTO resume_analysis
-                   (resume_name, candidate_name, profession, overall_score, analysis_json, questions_json)
-                   VALUES (%s, %s, %s, %s, %s, %s)""",
-                (f.filename, analysis.get("name", ""), analysis.get("profession", ""),
-                 analysis.get("score", 0), json.dumps(analysis), json.dumps(questions))
-            )
-            analysis_id = cursor.lastrowid
-            conn.commit()
-            cursor.close()
-        finally:
-            conn.close()
-        return jsonify(analysis_id=analysis_id, analysis=analysis, questions=questions)
+
+        # No database required
+        return jsonify(
+            analysis_id=None,
+            analysis=analysis,
+            questions=questions
+        )
+
     except UserError as e:
         return jsonify(error=str(e)), e.status
+
     except Exception:
         app.logger.exception("Unexpected error")
-        return jsonify(error="Unexpected server error. Check the Flask terminal."), 500
-
+        return jsonify(error="Unexpected server error. Check the Vercel logs."), 500
 
 @app.errorhandler(413)
 def too_big(_):
@@ -181,34 +165,27 @@ def too_big(_):
 @app.post("/api/quiz-result")
 def save_quiz_result():
     data = request.get_json(silent=True) or {}
+
     try:
-        analysis_id = int(data.get("analysis_id"))
         total = int(data.get("total_questions", 0))
         correct = int(data.get("correct_answers", 0))
         wrong = int(data.get("wrong_answers", 0))
         percentage = float(data.get("percentage", 0))
+
         if total < 1 or min(correct, wrong) < 0:
             raise ValueError("Invalid quiz result")
-        conn = get_db_connection()
-        try:
-            cursor = conn.cursor()
-            cursor.execute(
-                """INSERT INTO quiz_results
-                   (analysis_id, total_questions, correct_answers, wrong_answers, percentage)
-                   VALUES (%s, %s, %s, %s, %s)""",
-                (analysis_id, total, correct, wrong, percentage)
-            )
-            conn.commit()
-            cursor.close()
-        finally:
-            conn.close()
-        return jsonify(message="Quiz result saved", saved=True), 201
+
+        return jsonify(
+            message="Quiz completed successfully",
+            saved=False,
+            total_questions=total,
+            correct_answers=correct,
+            wrong_answers=wrong,
+            percentage=percentage
+        ), 200
+
     except (TypeError, ValueError):
         return jsonify(error="Invalid quiz result data"), 400
-    except MySQLError:
-        app.logger.exception("Could not save quiz result")
-        return jsonify(error="Could not save quiz result. Check MySQL and analysis ID."), 500
-
 # Homepage
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
@@ -219,17 +196,14 @@ def home():
 @app.get("/<path:filename>")
 def frontend_files(filename):
     return send_from_directory(PROJECT_ROOT, filename)
-@app.get("/")
+@app.get("/api/health")
 def health():
-    database = "disconnected"
-    try:
-        conn = get_db_connection()
-        conn.close()
-        database = "connected"
-    except MySQLError:
-        app.logger.exception("MySQL health check failed")
-    return jsonify(status="ok", model=MODEL, key_loaded=bool(API_KEY), database=database)
-
+return jsonify(
+status="ok",
+model=MODEL,
+key_loaded=bool(API_KEY),
+database="not_required"
+)
 
 if __name__ == "__main__":
     app.run(debug=True, port=5000)
