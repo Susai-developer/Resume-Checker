@@ -86,34 +86,61 @@ RESUME TEXT:
 
 def ask_gemini(text):
     if not client:
-        raise UserError("Server is missing GEMINI_API_KEY in the .env file.", 500)
+        raise UserError(
+            "Server is missing GEMINI_API_KEY in Vercel Environment Variables.",
+            500
+        )
+
     try:
         res = client.models.generate_content(
             model=MODEL,
             contents=PROMPT + text[:15000],
-            config=types.GenerateContentConfig(response_mime_type="application/json", temperature=0.4),
+            config=types.GenerateContentConfig(
+                response_mime_type="application/json",
+                temperature=0.4
+            ),
         )
+
         return json.loads(res.text)
+
     except json.JSONDecodeError:
-        raise UserError("The AI returned an unreadable answer. Please try again.", 502)
-        except Exception as e:
+        raise UserError(
+            "The AI returned an unreadable answer. Please try again.",
+            502
+        )
+
+    except Exception as e:
         app.logger.exception("Gemini API error")
         msg = str(e)
 
         if "429" in msg or "quota" in msg.lower():
-            raise UserError("Gemini free limit reached. Wait a minute and try again.", 429)
+            raise UserError(
+                "Gemini free limit reached. Wait a minute and try again.",
+                429
+            )
 
         if "API key" in msg or "403" in msg or "401" in msg:
-            raise UserError("Gemini API key is invalid. Check Vercel Environment Variables.", 500)
+            raise UserError(
+                "Gemini API key is invalid. Check Vercel Environment Variables.",
+                500
+            )
 
         if "404" in msg:
-            raise UserError(f"Model '{MODEL}' not found. Check GEMINI_MODEL in Vercel.", 500)
+            raise UserError(
+                f"Model '{MODEL}' not found. Check GEMINI_MODEL in Vercel.",
+                500
+            )
 
         if "503" in msg or "UNAVAILABLE" in msg.upper():
-    raise UserError("Gemini is temporarily unavailable. Please try again shortly.", 503)
+            raise UserError(
+                "Gemini is temporarily unavailable. Please try again shortly.",
+                503
+            )
 
-raise UserError("Could not reach Gemini. Please try again.", 502)
-
+        raise UserError(
+            "Could not reach Gemini. Please try again.",
+            502
+        )
 
 def clean(data):
     """Validate the AI output so the frontend never breaks."""
@@ -206,12 +233,12 @@ def frontend_files(filename):
     return send_from_directory(PROJECT_ROOT, filename)
 @app.get("/api/health")
 def health():
-return jsonify(
-status="ok",
-model=MODEL,
-key_loaded=bool(API_KEY),
-database="not_required"
-)
+    return jsonify(
+        status="ok",
+        model=MODEL,
+        key_loaded=bool(API_KEY),
+        database="not_required"
+    )
 
 if __name__ == "__main__":
     app.run(debug=True, port=5000)
